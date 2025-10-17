@@ -161,11 +161,10 @@ if (isset($_SESSION["message"])) {
 
         <?php echo $message; ?>
 
-        <small>Already have an account? <a href="#">Login here</a></small>
+        <small>Already have an account? <a href="/login.php">Login here</a></small>
     </div>
 
     <script>
-        // 🕒 Make the message fade out after 3 seconds
         setTimeout(() => {
             const alertBox = document.querySelector('.alert');
             if (alertBox) {
