@@ -1,12 +1,17 @@
 <?php
 session_start();
 
+if (isset($_SESSION["username"])) {
+    header("location: index.php");
+    exit;
+}
+
 $servername = getenv("MYSQL_HOST");
-$username = getenv("MYSQL_USER");
-$password = getenv("MYSQL_PASSWORD");
+$username_db = getenv("MYSQL_USER");
+$password_db = getenv("MYSQL_PASSWORD");
 $database = getenv("MYSQL_DB");
 
-$conn = new mysqli($servername, $username, $password, $database);
+$conn = new mysqli($servername, $username_db, $password_db, $database);
 if ($conn->connect_error) {
     die("Database connection failed: " . $conn->connect_error);
 }
@@ -14,39 +19,36 @@ if ($conn->connect_error) {
 $message = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $user = trim($_POST["username"]);
-    $pass = trim($_POST["password"]);
+    $login_input = trim($_POST["username"]); 
+    $password_input = $_POST["password"];
 
-    $stmt = $conn->prepare("SELECT Password FROM users WHERE Username = ?");
-    $stmt->bind_param("s", $user);
-    $stmt->execute();
-    $stmt->store_result();
-
-    if ($stmt->num_rows > 0) {
-        $stmt->bind_result($hashed_password);
-        $stmt->fetch();
-
-        if (password_verify($pass, $hashed_password)) {
-            // ✅ Successful login
-            $_SESSION["username"] = $user;
-
-            // Redirect to index after 1 second
-            header("Refresh: 1; URL=index.php");
-            $message = "<div class='alert alert-success text-center mt-3 animate__animated animate__fadeIn' id='fadeMessage'>
-                            ✅ Login successful! Redirecting...
-                        </div>";
-        } else {
-            $message = "<div class='alert alert-danger text-center mt-3 animate__animated animate__shakeX' id='fadeMessage'>
-                            ❌ Incorrect password!
-                        </div>";
-        }
+    if (empty($login_input) || empty($password_input)) {
+        $message = "<div class='alert alert-danger text-center mt-3 animate__animated animate__shakeX'>❌ Error: Username/Email and Password are required.</div>";
     } else {
-        $message = "<div class='alert alert-warning text-center mt-3 animate__animated animate__shakeX' id='fadeMessage'>
-                        ⚠️ User not found!
-                    </div>";
-    }
+        $stmt = $conn->prepare("SELECT Username, Password FROM users WHERE Username = ? OR Email = ?");
+        $stmt->bind_param("ss", $login_input, $login_input); 
+        $stmt->execute();
+        $stmt->store_result();
 
-    $stmt->close();
+        if ($stmt->num_rows == 1) {
+            $stmt->bind_result($username_from_db, $hashed_password_from_db);
+            $stmt->fetch();
+
+            if (password_verify($password_input, $hashed_password_from_db)) {
+
+                session_regenerate_id(true);
+                $_SESSION["username"] = $username_from_db; 
+
+                header("location: index.php");
+                exit;
+            } else {
+                $message = "<div class='alert alert-danger text-center mt-3 animate__animated animate__shakeX'>❌ Error: Invalid credentials.</div>";
+            }
+        } else {
+            $message = "<div class='alert alert-danger text-center mt-3 animate__animated animate__shakeX'>❌ Error: Invalid credentials.</div>";
+        }
+        $stmt->close();
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -56,104 +58,135 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <title>Login | Web Scanner</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
     <style>
         body {
-            background: radial-gradient(circle at top left, #0f172a, #1e293b);
+            font-family: "Poppins", sans-serif;
             height: 100vh;
+            margin: 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: "Poppins", sans-serif;
-            color: white;
+            background: radial-gradient(circle at 30% 20%, #0f2027, #081f27ff, #182f39ff);
+            color: #e0e0e0;
         }
 
         .login-card {
-            background: rgba(30, 41, 59, 0.8);
-            backdrop-filter: blur(12px);
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            background: rgba(25, 39, 52, 0.85);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
             padding: 40px;
             width: 100%;
             max-width: 420px;
-            animation: fadeInDown 0.8s;
+            animation: fadeIn 0.8s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .login-card h3 {
             text-align: center;
             margin-bottom: 25px;
             font-weight: 600;
-            color: #38bdf8;
+            color: #66b2ff;
         }
 
         .form-control {
-            background-color: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: #e2e8f0;
+            background-color: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #f1f1f1;
+            border-radius: 12px;
+            padding-right: 40px;
         }
 
         .form-control:focus {
-            background-color: rgba(255,255,255,0.1);
-            box-shadow: 0 0 0 0.2rem rgba(56,189,248,0.25);
-            color: #fff;
+            background-color: rgba(255, 255, 255, 0.12);
+            border-color: #66b2ff;
+            box-shadow: 0 0 10px rgba(102, 178, 255, 0.4);
+            outline: none;
         }
 
         ::placeholder {
-            color: rgba(255,255,255,0.5);
+            color: rgba(255, 255, 255, 0.6);
         }
 
         .btn-custom {
-            background: linear-gradient(135deg, #1d4ed8, #2563eb);
+            background: linear-gradient(135deg, #1e90ff, #0066cc);
             border: none;
             color: #fff;
             font-weight: 600;
+            border-radius: 12px;
             transition: all 0.3s ease;
         }
 
         .btn-custom:hover {
+            background: linear-gradient(135deg, #3399ff, #0077e6);
+            box-shadow: 0 0 12px rgba(30, 144, 255, 0.5);
             transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+        }
+        
+        .toggle-password-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #a0b3c0;
+            cursor: pointer;
         }
 
         small {
             display: block;
             text-align: center;
             margin-top: 15px;
-            opacity: 0.8;
+            color: #a0b3c0;
         }
 
-        @keyframes fadeOut {
-            from { opacity: 1; }
-            to { opacity: 0; display: none; }
+        small a {
+            color: #66b2ff;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        small a:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
 <body>
     <div class="login-card animate__animated animate__fadeInDown">
-        <h3>Login</h3>
+        <h3>Welcome Back!</h3>
         <form method="POST" action="">
             <div class="mb-3">
-                <input type="text" name="username" class="form-control" placeholder="Username" required>
+                <input type="text" name="username" class="form-control" placeholder="Username or Email" required>
             </div>
-            <div class="mb-3">
-                <input type="password" name="password" class="form-control" placeholder="Password" required>
+            <div class="mb-3 position-relative">
+                <input type="password" name="password" id="password" class="form-control" placeholder="Password" required>
+                <i class="bi bi-eye-slash toggle-password-icon" id="togglePassword"></i>
             </div>
             <button type="submit" class="btn btn-custom w-100 py-2">Login</button>
         </form>
+
         <?php echo $message; ?>
-        <small>Don't have an account? <a href="register.php" style="color: #38bdf8;">Register here</a></small>
+
+        <small>Don't have an account? <a href="/register.php">Register here</a></small>
     </div>
 
     <script>
-        // Fade out alert after 3 seconds
-        const msg = document.getElementById('fadeMessage');
-        if (msg) {
-            setTimeout(() => {
-                msg.style.transition = 'opacity 1s ease';
-                msg.style.opacity = '0';
-                setTimeout(() => msg.remove(), 1000);
-            }, 3000);
-        }
+        const togglePassword = document.getElementById('togglePassword');
+        const password = document.getElementById('password');
+
+        togglePassword.addEventListener('click', function () {
+            const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
+            password.setAttribute('type', type);
+            
+            this.classList.toggle('bi-eye');
+            this.classList.toggle('bi-eye-slash');
+        });
     </script>
 </body>
 </html>
