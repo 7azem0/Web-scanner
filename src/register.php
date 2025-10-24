@@ -10,26 +10,48 @@ $conn = new mysqli($servername, $username, $password, $database);
 if ($conn->connect_error) {
     die("Database connection failed: " . $conn->connect_error);
 }
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT); 
 
 $message = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $user = trim($_POST["username"]);
-    $email = trim($_POST["email"]);
-    $pass = password_hash($_POST["password"], PASSWORD_BCRYPT);
+    $email_input = trim($_POST["email"]);
+    $password_input = $_POST["password"];
 
-    $stmt = $conn->prepare("INSERT INTO users (Username, Email, Password) VALUES (?, ?, ?)");
-    $stmt->bind_param("sss", $user, $email, $pass);
-
-    if ($stmt->execute()) {
-        $_SESSION["message"] = "<div class='alert alert-success text-center mt-3 animate__animated animate__fadeIn'>✅ Registration successful!</div>";
+    if (empty($user) || empty($email_input) || empty($password_input)) {
+        $_SESSION["message"] = "<div class='alert alert-danger text-center mt-3 animate__animated animate__shakeX'>❌ Error: All fields are required.</div>";
+    } elseif (!filter_var($email_input, FILTER_VALIDATE_EMAIL)) {
+         $_SESSION["message"] = "<div class='alert alert-danger text-center mt-3 animate__animated animate__shakeX'>❌ Error: Invalid email format.</div>";
     } else {
-        $_SESSION["message"] = "<div class='alert alert-danger text-center mt-3 animate__animated animate__shakeX'>❌ Error: " . htmlspecialchars($stmt->error) . "</div>";
+        $email = $email_input;
+        $pass = password_hash($password_input, PASSWORD_BCRYPT);
+
+        try {
+            $stmt = $conn->prepare("INSERT INTO users (Username, Email, Password) VALUES (?, ?, ?)");
+            $stmt->bind_param("sss", $user, $email, $pass);
+            $stmt->execute();
+            $_SESSION["message"] = "<div class='alert alert-success text-center mt-3 animate__animated animate__fadeIn'>✅ Registration successful!</div>";
+            $stmt->close();
+
+        } catch (mysqli_sql_exception $e) {
+            if ($e->getCode() == 1062) { 
+                if (stripos($e->getMessage(), 'Username') !== false) {
+                    $_SESSION["message"] = "<div class='alert alert-danger text-center mt-3 animate__animated animate__shakeX'>❌ Error: This username is already taken.</div>";
+                } elseif (stripos($e->getMessage(), 'Email') !== false) {
+                    $_SESSION["message"] = "<div class='alert alert-danger text-center mt-3 animate__animated animate__shakeX'>❌ Error: This email is already registered.</div>";
+                } else {
+                    $_SESSION["message"] = "<div class='alert alert-danger text-center mt-3 animate__animated animate__shakeX'>❌ Error: Duplicate entry. Please check your inputs.</div>";
+                }
+            } else {
+                 $_SESSION["message"] = "<div class='alert alert-danger text-center mt-3 animate__animated animate__shakeX'>❌ Error: " . htmlspecialchars($e->getMessage()) . "</div>";
+            }
+            if (isset($stmt) && $stmt instanceof mysqli_stmt) {
+                $stmt->close();
+            }
+        }
     }
 
-    $stmt->close();
-
-    // 🌀 Redirect to same page (clears POST data)
     header("Location: " . $_SERVER["PHP_SELF"]);
     exit();
 }
@@ -137,7 +159,6 @@ if (isset($_SESSION["message"])) {
             text-decoration: underline;
         }
 
-        /* 🕒 Fade-out animation for message */
         .alert {
             transition: opacity 1s ease-out;
         }
@@ -151,7 +172,7 @@ if (isset($_SESSION["message"])) {
                 <input type="text" name="username" class="form-control" placeholder="Username" required>
             </div>
             <div class="mb-3">
-                <input type="email" name="email" class="form-control" placeholder="Email (optional)">
+                <input type="email" name="email" class="form-control" placeholder="Email" required>
             </div>
             <div class="mb-3">
                 <input type="password" name="password" class="form-control" placeholder="Password" required>
